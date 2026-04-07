@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Island Ferry Epidemic Simulation</title>
+    <!-- Updated CDN to prevent source-map 404 warnings -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; background-color: #f8f9fa; color: #333; overflow: hidden; }
+        
+        #top-container { display: flex; flex: 1; overflow: hidden; }
+        
+        #sidebar { width: 300px; background: #fff; border-right: 1px solid #ddd; padding: 15px; overflow-y: auto; box-shadow: 2px 0 5px rgba(0,0,0,0.05); z-index: 10; font-size: 0.9rem; }
+        #sidebar h2 { margin-top: 0; font-size: 1.1rem; color: #2c3e50; margin-bottom: 10px; }
+        .control-group { margin-bottom: 12px; background: #f8f9fa; padding: 8px; border-radius: 6px; border: 1px solid #eee; }
+        .control-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        .control-row input[type=number], .control-row input[type=range], .control-row select { width: 80px; padding: 2px 4px; font-size: 0.85rem;}
+        
+        .btn-row { display: flex; gap: 8px; margin-top: 15px; }
+        button { flex: 1; padding: 8px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; color: white; transition: 0.2s; font-size: 0.9rem;}
+        #btn-start { background-color: #2ca02c; } #btn-start:hover { background-color: #248224; }
+        #btn-pause { background-color: #f39c12; } #btn-pause:hover { background-color: #d68910; }
+        #btn-reset { background-color: #d62728; } #btn-reset:hover { background-color: #b31f1f; }
+        
+        .legend { display: flex; gap: 8px; margin-bottom: 10px; font-size: 0.8rem; font-weight: bold; justify-content: center; flex-wrap: wrap;}
+        .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+        .s-dot { background: #2ca02c; } .i-dot { background: #d62728; } .r-dot { background: #1f77b4; } .d-dot { background: #000000; }
+
+        #main-area { flex: 1; display: flex; flex-direction: column; position: relative; background: #e0f7fa; justify-content: center; align-items: center;}
+        
+        #canvas-wrapper { position: relative; width: 680px; height: 480px; background: #e0f7fa; border-radius: 10px; box-shadow: inset 0 0 20px rgba(0,0,0,0.1); border: 2px solid #b2ebf2; flex-shrink: 0;}
+        canvas { display: block; width: 100%; height: 100%; }
+        
+        /* Island panels pinned to safe corners to prevent overlap */
+        .island-panel { position: absolute; background: rgba(255, 255, 255, 0.95); border: 1px solid #999; border-radius: 6px; padding: 6px 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); width: 135px; font-size: 0.75rem; z-index: 5; }
+        .island-panel h4 { margin: 0 0 4px 0; font-size: 0.85rem; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 2px;}
+        .island-panel .c-row { display: flex; justify-content: space-between; margin-bottom: 3px; align-items: center;}
+        .island-panel input { width: 40px; font-size: 0.75rem; padding: 1px 3px;}
+        
+        #charts-area { display: flex; flex-direction: row; height: 220px; background: #fff; border-top: 1px solid #ddd; padding: 10px 15px; gap: 15px; flex-shrink: 0;}
+        .chart-box { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        .chart-controls { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; font-size: 0.8rem; flex-wrap: wrap;}
+        .chart-container { flex: 1; position: relative; min-height: 0; }
+    </style>
+</head>
+<body>
+
+<div id="top-container">
+    <div id="sidebar">
+        <h2>Global Controls</h2>
+        <div class="legend">
+            <div><span class="dot s-dot"></span>Susceptible</div>
+            <div><span class="dot i-dot"></span>Infected</div>
+            <div><span class="dot r-dot"></span>Recovered</div>
+            <div><span class="dot d-dot"></span>Deceased</div>
+        </div>
+
+        <div class="control-group">
+            <strong>Disease Dynamics</strong>
+            <div class="control-row"><span>Trans. Rate (β)</span> <input type="number" id="g-beta" value="0.5" step="0.1" min="0"></div>
+            <div class="control-row"><span>Recovery Time (days)</span> <input type="number" id="g-rectime" value="7" step="1" min="1"></div>
+            <div class="control-row"><span>Young Mort/day (%)</span> <input type="number" id="g-youngmort" value="0.01" step="0.01" min="0"></div>
+            <div class="control-row"><span>Senior Mort/day (%)</span> <input type="number" id="g-seniormort" value="0.2" step="0.05" min="0"></div>
+        </div>
+
+        <div class="control-group">
+            <strong>Screening & Symptoms</strong>
+            <div class="control-row"><span>Symptomatic Frac (%)</span> <input type="number" id="g-sympfrac" value="60" step="5" min="0" max="100"></div>
+            <div class="control-row"><span>Screen Sensitivity (%)</span> <input type="number" id="g-screensens" value="80" step="5" min="0" max="100"></div>
+            <div class="control-row">
+                <span><input type="checkbox" id="g-enablescreen"> Enable Hub Screening</span>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <strong>Interventions & Setup</strong>
+            <div class="control-row">
+                <span><input type="checkbox" id="g-lockdown"> Ferry Lockdown</span>
+            </div>
+            <div class="control-row">
+                <span>Seed Infection On:</span>
+                <select id="g-seed">
+                    <option value="Hub">Hub</option>
+                    <option value="North">North</option>
+                    <option value="South">South</option>
+                    <option value="East">East</option>
+                    <option value="West">West</option>
+                </select>
+            </div>
+            <div class="control-row">
+                <span>Sim Speed</span>
+                <input type="range" id="g-speed" min="1" max="10" value="5">
+            </div>
+        </div>
+
+        <div class="btn-row">
+            <button id="btn-start">Start</button>
+            <button id="btn-pause">Pause</button>
+            <button id="btn-reset">Reset</button>
+        </div>
+        
+        <div style="margin-top: 15px; text-align: center; font-weight: bold; font-size: 1.1rem; color: #2c3e50;">
+            Day: <span id="day-counter">0</span>
+        </div>
+    </div>
+
+    <div id="main-area">
+        <div id="canvas-wrapper">
+            <canvas id="simCanvas" width="680" height="480"></canvas>
+            
+            <!-- Repositioned to safe zones to avoid visual overlap -->
+            <div id="panel-West" class="island-panel" style="left: 10px; top: 10px;">
+                <h4>West Island</h4>
+                <div class="c-row">Pop Size <input type="number" id="p-West-pop" value="100" min="10" max="200"></div>
+                <div class="c-row">Senior % <input type="number" id="p-West-sen" value="20" min="0" max="100"></div>
+                <div class="c-row">Ferry Int. (days) <input type="number" id="p-West-fint" value="1" min="1" max="10"></div>
+                <div class="c-row">Commuters <input type="number" id="p-West-fcom" value="20" min="0" max="100"></div>
+            </div>
+
+            <div id="panel-North" class="island-panel" style="left: 390px; top: 10px;">
+                <h4>North Island</h4>
+                <div class="c-row">Pop Size <input type="number" id="p-North-pop" value="80" min="10" max="200"></div>
+                <div class="c-row">Senior % <input type="number" id="p-North-sen" value="25" min="0" max="100"></div>
+                <div class="c-row">Ferry Int. (days) <input type="number" id="p-North-fint" value="1" min="1" max="10"></div>
+                <div class="c-row">Commuters <input type="number" id="p-North-fcom" value="15" min="0" max="100"></div>
+            </div>
+
+            <div id="panel-East" class="island-panel" style="left: 535px; top: 10px;">
+                <h4>East Island</h4>
+                <div class="c-row">Pop Size <input type="number" id="p-East-pop" value="50" min="10" max="200"></div>
+                <div class="c-row">Senior % <input type="number" id="p-East-sen" value="30" min="0" max="100"></div>
+                <div class="c-row">Ferry Int. (days) <input type="number" id="p-East-fint" value="3" min="1" max="10"></div>
+                <div class="c-row">Commuters <input type="number" id="p-East-fcom" value="5" min="0" max="100"></div>
+            </div>
+
+            <div id="panel-South" class="island-panel" style="left: 390px; top: 375px;">
+                <h4>South Island</h4>
+                <div class="c-row">Pop Size <input type="number" id="p-South-pop" value="60" min="10" max="200"></div>
+                <div class="c-row">Senior % <input type="number" id="p-South-sen" value="10" min="0" max="100"></div>
+                <div class="c-row">Ferry Int. (days) <input type="number" id="p-South-fint" value="2" min="1" max="10"></div>
+                <div class="c-row">Commuters <input type="number" id="p-South-fcom" value="10" min="0" max="100"></div>
+            </div>
+
+            <div id="panel-Hub" class="island-panel" style="left: 10px; top: 395px;">
+                <h4>Hub Island</h4>
+                <div class="c-row">Pop Size <input type="number" id="p-Hub-pop" value="150" min="10" max="300"></div>
+                <div class="c-row">Senior % <input type="number" id="p-Hub-sen" value="15" min="0" max="100"></div>
+            </div>
+            
+        </div>
+    </div>
+</div>
+
+<div id="charts-area">
+    <div class="chart-box">
+        <div class="chart-controls">
+            <strong>Time Series</strong>
+            <select id="line-metric">
+                <option value="I">Infected</option>
+                <option value="S">Susceptible</option>
+                <option value="R">Recovered</option>
+                <option value="D">Deceased</option>
+            </select>
+            <label><input type="checkbox" class="line-toggle" value="Total" checked> Total</label>
+            <label><input type="checkbox" class="line-toggle" value="Hub" checked> Hub</label>
+            <label><input type="checkbox" class="line-toggle" value="North" checked> North</label>
+            <label><input type="checkbox" class="line-toggle" value="South" checked> South</label>
+            <label><input type="checkbox" class="line-toggle" value="East" checked> East</label>
+            <label><input type="checkbox" class="line-toggle" value="West" checked> West</label>
+        </div>
+        <div class="chart-container"><canvas id="lineChart"></canvas></div>
+    </div>
+    
+    <div class="chart-box">
+        <div class="chart-controls">
+            <strong>Current State by Island</strong>
+            <select id="bar-metric">
+                <option value="I">Infected</option>
+                <option value="S">Susceptible</option>
+                <option value="R">Recovered</option>
+                <option value="D">Deceased</option>
+            </select>
+        </div>
+        <div class="chart-container"><canvas id="barChart"></canvas></div>
+    </div>
+</div>
+
+<script>
+// --- Constants & Utilities ---
+const COLORS = { S: '#2ca02c', I: '#d62728', R: '#1f77b4', D: '#000000' };
+const CANVAS_W = 680, CANVAS_H = 480;
+
+function randomJitter(range) { return (Math.random() - 0.5) * range; }
+
+// --- Simulation State ---
+let sim;
+let isRunning = false;
+let animationFrameId;
+
+class Person {
+    constructor(homeIsland, isSenior) {
+        this.homeIsland = homeIsland;
+        this.currentIsland = homeIsland;
+        this.isSenior = isSenior;
+        this.state = 'S'; 
+        this.willBeSymptomatic = false;
+        
+        this.x = homeIsland.x;
+        this.y = homeIsland.y;
+        this.scatterInCircle(homeIsland);
+    }
+    
+    scatterInCircle(island) {
+        let r = Math.random() * (island.radius - 4);
+        let theta = Math.random() * 2 * Math.PI;
+        this.x = island.x + r * Math.cos(theta);
+        this.y = island.y + r * Math.sin(theta);
+    }
+    
+    jitter(island) {
+        // FIX: Prevent null pointer error if commuter is currently on the ferry (island is null)
+        if (this.state === 'D' || !island) return; 
+        
+        this.x += randomJitter(2);
+        this.y += randomJitter(2);
+        
+        let dx = this.x - island.x;
+        let dy = this.y - island.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist > island.radius - 3) {
+            let angle = Math.atan2(dy, dx);
+            this.x = island.x + (island.radius - 3) * Math.cos(angle);
+            this.y = island.y + (island.radius - 3) * Math.sin(angle);
+        }
+    }
+    
+    die(island) {
+        this.state = 'D';
+        let gyTop = island.y + island.radius + 5;
+        let gyBottom = gyTop + 25;
+        let gyLeft = island.x - island.radius + 5;
+        let gyRight = island.x + island.radius - 5;
+        
+        this.x = gyLeft + Math.random() * (gyRight - gyLeft);
+        this.y = gyTop + Math.random() * (gyBottom - gyTop);
+    }
+}
+
+class Island {
+    constructor(id, name, isHub, x, y, radius) {
+        this.id = id;
+        this.name = name;
+        this.isHub = isHub;
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.daysSinceFerry = 0;
+    }
+    
+    readParams() {
+        this.popSize = parseInt(document.getElementById(`p-${this.id}-pop`).value) || 0;
+        this.seniorPct = parseFloat(document.getElementById(`p-${this.id}-sen`).value) / 100 || 0;
+        if (!this.isHub) {
+            this.ferryInterval = parseInt(document.getElementById(`p-${this.id}-fint`).value) || 1;
+            this.ferryComms = parseInt(document.getElementById(`p-${this.id}-fcom`).value) || 0;
+        }
+    }
+}
+
+class Ferry {
+    constructor(outerIsland, hubIsland) {
+        this.outer = outerIsland;
+        this.hub = hubIsland;
+        this.commuters = [];
+        this.x = 0;
+        this.y = 0;
+        this.updateDockedOuter();
+        this.state = 'docked_outer';
+    }
+    
+    getDockCoords(island, isHub) {
+        let dx = this.outer.x - this.hub.x;
+        let dy = this.outer.y - this.hub.y;
+        let angle = Math.atan2(dy, dx); 
+        if (isHub) {
+            return { x: this.hub.x + (this.hub.radius + 12) * Math.cos(angle), y: this.hub.y + (this.hub.radius + 12) * Math.sin(angle) };
+        } else {
+            return { x: this.outer.x - (this.outer.radius + 12) * Math.cos(angle), y: this.outer.y - (this.outer.radius + 12) * Math.sin(angle) };
+        }
+    }
+
+    updateDockedOuter() { let c = this.getDockCoords(this.outer, false); this.x = c.x; this.y = c.y; }
+    updateDockedHub() { let c = this.getDockCoords(this.hub, true); this.x = c.x; this.y = c.y; }
+    
+    interpolate(progress, toHub) {
+        let pOuter = this.getDockCoords(this.outer, false);
+        let pHub = this.getDockCoords(this.hub, true);
+        if (toHub) {
+            this.x = pOuter.x + progress * (pHub.x - pOuter.x);
+            this.y = pOuter.y + progress * (pHub.y - pOuter.y);
+        } else {
+            this.x = pHub.x + progress * (pOuter.x - pHub.x);
+            this.y = pHub.y + progress * (pOuter.y - pHub.y);
+        }
+    }
+}
+
+class Simulation {
+    constructor() {
+        this.day = 0;
+        this.phase = 'morning_transit'; 
+        this.animProgress = 0;
+        
+        this.beta = parseFloat(document.getElementById('g-beta').value);
+        this.recProb = 1.0 / parseFloat(document.getElementById('g-rectime').value);
+        this.youngMort = parseFloat(document.getElementById('g-youngmort').value) / 100;
+        this.seniorMort = parseFloat(document.getElementById('g-seniormort').value) / 100;
+        this.sympFrac = parseFloat(document.getElementById('g-sympfrac').value) / 100;
+        this.screenSens = parseFloat(document.getElementById('g-screensens').value) / 100;
+        this.enableScreening = document.getElementById('g-enablescreen').checked;
+        this.lockdown = document.getElementById('g-lockdown').checked;
+        this.seedIslandId = document.getElementById('g-seed').value;
+        
+        // Scaled coordinates to fit perfectly inside the 680x480 canvas
+        this.islands = [
+            new Island('Hub', 'Hub', true, 340, 240, 60),
+            new Island('North', 'North', false, 340, 80, 40),
+            new Island('South', 'South', false, 340, 400, 40),
+            new Island('East', 'East', false, 550, 240, 40),
+            new Island('West', 'West', false, 130, 240, 40)
+        ];
+        
+        this.persons = [];
+        this.ferries = [];
+        let hub = this.islands.find(i => i.isHub);
+        
+        this.islands.forEach(isl => {
+            isl.readParams();
+            for(let i=0; i<isl.popSize; i++) {
+                let isSenior = Math.random() < isl.seniorPct;
+                this.persons.push(new Person(isl, isSenior));
+            }
+            if (!isl.isHub) {
+                this.ferries.push(new Ferry(isl, hub));
+            }
+        });
+        
+        let seedCandidates = this.persons.filter(p => p.homeIsland.id === this.seedIslandId);
+        if (seedCandidates.length > 0) {
+            let p0 = seedCandidates[Math.floor(Math.random() * seedCandidates.length)];
+            p0.state = 'I';
+            p0.willBeSymptomatic = (Math.random() < this.sympFrac);
+        }
+
+        this.history = { Total: {S:[], I:[], R:[], D:[]} };
+        this.islands.forEach(isl => this.history[isl.id] = {S:[], I:[], R:[], D:[]});
+        this.recordStats(); 
+    }
+
+    getIslandById(id) { return this.islands.find(i => i.id === id); }
+
+    stepAnimation(dt) {
+        let speed = parseInt(document.getElementById('g-speed').value);
+        let animSpeed = speed * 0.8; 
+        
+        if (this.phase === 'morning_transit') {
+            if (this.animProgress === 0) this.handleMorningBoarding();
+            
+            this.animProgress += dt * animSpeed;
+            if (this.animProgress >= 1) {
+                this.animProgress = 1;
+                this.ferries.forEach(f => {
+                    if (f.state === 'transit_hub') {
+                        f.state = 'docked_hub';
+                        f.updateDockedHub();
+                        f.commuters.forEach(p => p.currentIsland = f.hub);
+                    }
+                });
+                this.phase = 'day_mixing';
+                this.animProgress = 0;
+            } else {
+                this.ferries.forEach(f => {
+                    if (f.state === 'transit_hub') f.interpolate(this.animProgress, true);
+                });
+            }
+        } 
+        else if (this.phase === 'day_mixing') {
+            this.animProgress += dt * speed * 2;
+            if (this.animProgress >= 1) {
+                this.executeTransmission();
+                this.phase = 'evening_transit';
+                this.animProgress = 0;
+            }
+        }
+        else if (this.phase === 'evening_transit') {
+            if (this.animProgress === 0) this.handleEveningBoarding();
+            
+            this.animProgress += dt * animSpeed;
+            if (this.animProgress >= 1) {
+                this.animProgress = 1;
+                this.ferries.forEach(f => {
+                    if (f.state === 'transit_outer') {
+                        f.state = 'docked_outer';
+                        f.updateDockedOuter();
+                        f.commuters.forEach(p => p.currentIsland = f.outer);
+                        f.commuters = []; 
+                    }
+                });
+                this.phase = 'night_progression';
+                this.animProgress = 0;
+            } else {
+                this.ferries.forEach(f => {
+                    if (f.state === 'transit_outer') f.interpolate(this.animProgress, false);
+                });
+            }
+        }
+        else if (this.phase === 'night_progression') {
+            this.executeProgression();
+            this.recordStats();
+            this.day++;
+            document.getElementById('day-counter').innerText = this.day;
+            updateCharts();
+            this.phase = 'morning_transit';
+        }
+
+        this.persons.forEach(p => p.jitter(p.currentIsland));
+    }
+
+    handleMorningBoarding() {
+        this.ferries.forEach(f => {
+            f.outer.daysSinceFerry++;
+            if (this.lockdown) {
+                f.state = 'docked_outer';
+                return;
+            }
+            if (f.outer.daysSinceFerry >= f.outer.ferryInterval) {
+                f.outer.daysSinceFerry = 0; 
+                f.state = 'transit_hub';
+                let candidates = this.persons.filter(p => p.homeIsland === f.outer && p.state !== 'D');
+                for (let i = candidates.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+                }
+                
+                let boarded = 0;
+                for (let p of candidates) {
+                    if (boarded >= f.outer.ferryComms) break;
+                    let blockBoarding = false;
+                    if (this.enableScreening && p.state === 'I' && p.willBeSymptomatic) {
+                        if (Math.random() < this.screenSens) blockBoarding = true;
+                    }
+                    if (!blockBoarding) {
+                        f.commuters.push(p);
+                        p.currentIsland = null; 
+                        boarded++;
+                    }
+                }
+            } else {
+                f.state = 'docked_outer'; 
+            }
+        });
+    }
+
+    handleEveningBoarding() {
+        this.ferries.forEach(f => {
+            if (f.state === 'docked_hub') {
+                f.state = 'transit_outer';
+                f.commuters.forEach(p => p.currentIsland = null); 
+            }
+        });
+    }
+
+    executeTransmission() {
+        this.islands.forEach(isl => {
+            let localPop = this.persons.filter(p => p.currentIsland === isl);
+            let nLiving = localPop.filter(p => p.state !== 'D').length;
+            let nInfected = localPop.filter(p => p.state === 'I').length;
+            
+            if (nLiving > 0 && nInfected > 0) {
+                let lambda = this.beta * (nInfected / nLiving);
+                let prob = 1 - Math.exp(-lambda);
+                
+                localPop.forEach(p => {
+                    if (p.state === 'S' && Math.random() < prob) {
+                        p.state = 'I';
+                        p.willBeSymptomatic = (Math.random() < this.sympFrac);
+                    }
+                });
+            }
+        });
+    }
+
+    executeProgression() {
+        this.persons.forEach(p => {
+            if (p.state === 'I') {
+                if (Math.random() < this.recProb) {
+                    p.state = 'R';
+                } else {
+                    let mortProb = p.isSenior ? this.seniorMort : this.youngMort;
+                    if (Math.random() < mortProb) {
+                        p.die(p.homeIsland);
+                    }
+                }
+            }
+        });
+    }
+
+    recordStats() {
+        let stats = { Total: {S:0, I:0, R:0, D:0} };
+        this.islands.forEach(isl => stats[isl.id] = {S:0, I:0, R:0, D:0});
+        
+        this.persons.forEach(p => {
+            stats.Total[p.state]++;
+            stats[p.homeIsland.id][p.state]++;
+        });
+        
+        for (let key in stats) {
+            this.history[key].S.push(stats[key].S);
+            this.history[key].I.push(stats[key].I);
+            this.history[key].R.push(stats[key].R);
+            this.history[key].D.push(stats[key].D);
+        }
+    }
+}
+
+// --- Visual Rendering ---
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+
+function draw() {
+    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+    
+    // Draw Routes
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    sim.ferries.forEach(f => {
+        ctx.beginPath();
+        ctx.moveTo(f.outer.x, f.outer.y);
+        ctx.lineTo(f.hub.x, f.hub.y);
+        ctx.stroke();
+    });
+    ctx.setLineDash([]);
+
+    // Draw Islands & Graveyards
+    sim.islands.forEach(isl => {
+        // Graveyard
+        ctx.fillStyle = '#eee';
+        ctx.fillRect(isl.x - isl.radius + 5, isl.y + isl.radius + 5, isl.radius*2 - 10, 25);
+        ctx.strokeStyle = '#aaa';
+        ctx.strokeRect(isl.x - isl.radius + 5, isl.y + isl.radius + 5, isl.radius*2 - 10, 25);
+        
+        // Island
+        ctx.beginPath();
+        ctx.arc(isl.x, isl.y, isl.radius, 0, Math.PI * 2);
+        ctx.fillStyle = isl.isHub ? '#ffeb3b' : '#c8e6c9';
+        ctx.fill();
+        ctx.strokeStyle = '#666';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    });
+
+    // Draw People
+    const TAU = Math.PI * 2;
+    sim.persons.forEach(p => {
+        if (p.currentIsland === null && p.state !== 'D') return; 
+        
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2.5, 0, TAU);
+        ctx.fillStyle = COLORS[p.state];
+        ctx.fill();
+        if (p.isSenior && p.state !== 'D') {
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+    });
+
+    // Draw Ferries
+    sim.ferries.forEach(f => {
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, 10, 0, TAU);
+        ctx.fillStyle = '#8d6e63';
+        ctx.fill();
+        ctx.strokeStyle = '#3e2723';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(f.commuters.length, f.x, f.y);
+    });
+}
+
+// --- Main Loop ---
+let lastTime = 0;
+function loop(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    let dt = (timestamp - lastTime) / 1000;
+    lastTime = timestamp;
+    
+    if (isRunning) {
+        sim.stepAnimation(Math.min(dt, 0.1)); 
+    }
+    
+    draw();
+    animationFrameId = requestAnimationFrame(loop);
+}
+
+// --- Chart Setup & Logic ---
+let lineChart, barChart;
+
+function initCharts() {
+    const lineCtx = document.getElementById('lineChart').getContext('2d');
+    const barCtx = document.getElementById('barChart').getContext('2d');
+    
+    Chart.defaults.font.size = 11;
+
+    lineChart = new Chart(lineCtx, {
+        type: 'line',
+        data: { labels: [], datasets: [] },
+        options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+            scales: { x: { title: { display: true, text: 'Day' } }, y: { beginAtZero: true } }
+        }
+    });
+
+    barChart = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Hub', 'North', 'South', 'East', 'West'],
+            datasets: [
+                { label: 'Young', data: [], backgroundColor: '#999' },
+                { label: 'Senior', data: [], backgroundColor: '#444' }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: { tooltip: { mode: 'index', intersect: false } },
+            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+        }
+    });
+}
+
+const LINE_COLORS = { Total: '#000', Hub: '#ff9800', North: '#4caf50', South: '#f44336', East: '#2196f3', West: '#9c27b0' };
+
+function updateCharts() {
+    let metric = document.getElementById('line-metric').value;
+    let labels = Array.from({length: sim.day + 1}, (_, i) => i);
+    let datasets = [];
+    
+    document.querySelectorAll('.line-toggle').forEach(chk => {
+        let islandId = chk.value;
+        datasets.push({
+            label: islandId,
+            data: sim.history[islandId][metric],
+            borderColor: LINE_COLORS[islandId],
+            borderWidth: islandId === 'Total' ? 3 : 1.5,
+            borderDash: islandId === 'Total' ? [5,5] : [],
+            pointRadius: 0,
+            tension: 0.1,
+            hidden: !chk.checked
+        });
+    });
+    
+    lineChart.data.labels = labels;
+    lineChart.data.datasets = datasets;
+    lineChart.update();
+
+    let bMetric = document.getElementById('bar-metric').value; 
+    let bColor = COLORS[bMetric];
+    
+    let islandsOrder = ['Hub', 'North', 'South', 'East', 'West'];
+    let youngData = [];
+    let seniorData = [];
+    
+    islandsOrder.forEach(id => {
+        let isl = sim.getIslandById(id);
+        let pop = sim.persons.filter(p => p.homeIsland === isl && p.state === bMetric);
+        youngData.push(pop.filter(p => !p.isSenior).length);
+        seniorData.push(pop.filter(p => p.isSenior).length);
+    });
+    
+    barChart.data.datasets[0].data = youngData;
+    barChart.data.datasets[0].backgroundColor = bColor + '80'; 
+    barChart.data.datasets[1].data = seniorData;
+    barChart.data.datasets[1].backgroundColor = bColor;        
+    barChart.update();
+}
+
+// --- Event Wiring & Lifecycle ---
+function resetSim() {
+    isRunning = false;
+    if(animationFrameId) cancelAnimationFrame(animationFrameId);
+    
+    sim = new Simulation();
+    document.getElementById('day-counter').innerText = 0;
+    
+    if(!lineChart) initCharts();
+    updateCharts();
+    
+    lastTime = 0;
+    animationFrameId = requestAnimationFrame(loop);
+}
+
+document.getElementById('btn-start').addEventListener('click', () => isRunning = true);
+document.getElementById('btn-pause').addEventListener('click', () => isRunning = false);
+document.getElementById('btn-reset').addEventListener('click', resetSim);
+
+document.querySelectorAll('input, select').forEach(el => {
+    if(el.type !== 'checkbox' || el.classList.contains('line-toggle') === false) {
+        if(el.id !== 'line-metric' && el.id !== 'bar-metric') {
+            el.addEventListener('change', resetSim);
+        }
+    }
+});
+
+document.getElementById('line-metric').addEventListener('change', updateCharts);
+document.getElementById('bar-metric').addEventListener('change', updateCharts);
+document.querySelectorAll('.line-toggle').forEach(el => el.addEventListener('change', updateCharts));
+
+resetSim();
+</script>
+</body>
+</html>

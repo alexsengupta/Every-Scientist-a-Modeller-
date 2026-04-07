@@ -1,0 +1,963 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Predator–Prey Delay Explorer</title>
+  <style>
+    :root{
+      --bg0:#070a14;
+      --bg1:#0b1020;
+      --panel:#121a33;
+      --panel2:#0f1730;
+      --text:#eef2ff;
+      --muted:#b8c0ee;
+      --border:rgba(255,255,255,.12);
+      --accent:#7aa2ff;
+      --accent2:#34d399;   /* prey */
+      --accent3:#fb7185;   /* predator */
+      --accent4:#fbbf24;   /* highlight */
+      --warn:#ffcc66;
+      --danger:#ff5c7a;
+      --radius:16px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:radial-gradient(1000px 420px at 30% -10%, rgba(122,162,255,.22), transparent 55%),
+                    radial-gradient(1000px 420px at 85% 10%, rgba(52,211,153,.14), transparent 60%),
+                    radial-gradient(900px 380px at 60% 110%, rgba(251,113,133,.10), transparent 55%),
+                    linear-gradient(180deg, var(--bg0), var(--bg1));
+         color:var(--text);font-family:var(--sans)}
+
+    .app{max-width:1280px;margin:0 auto;padding:18px;display:grid;gap:14px;grid-template-columns: 1fr 340px;}
+    .card{background:rgba(18,26,51,.88);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 14px 40px rgba(0,0,0,.42)}
+    .card .hd{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .card .bd{padding:14px 16px}
+
+    .title{grid-column:1 / -1;display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px 18px}
+    .title h1{margin:0;font-size:20px;letter-spacing:.01em}
+    .title p{margin:8px 0 0;color:var(--muted);font-size:13.5px;max-width:76ch}
+
+    /* Equation block */
+    .eqWrap{margin:8px 0 14px;display:grid;gap:10px}
+    .eqCard{background:rgba(10,14,28,.55);border:1px solid rgba(255,255,255,.10);border-radius:16px;padding:14px 14px}
+    .eqTitle{color:var(--muted);font-size:12px;margin:0 0 10px}
+    .eqn{font-family:var(--mono);font-size:15px;line-height:1.75;color:#f7f9ff}
+    .eqn .row{display:block;margin:0}
+    .eqn .frac{display:inline-grid;grid-template-rows:auto auto;align-items:center;justify-items:center;vertical-align:middle;margin:0 6px}
+    .eqn .frac .bar{width:100%;height:1px;background:rgba(255,255,255,.25)}
+    .eqn .term{padding:2px 6px;border-radius:12px;border:1px solid transparent;cursor:help;white-space:nowrap}
+    .eqn .term:hover{border-color:rgba(122,162,255,.55);background:rgba(122,162,255,.10)}
+    .eqn .x{color:rgba(52,211,153,.95)}
+    .eqn .y{color:rgba(251,113,133,.95)}
+
+    /* Controls */
+    .btns{display:flex;flex-wrap:wrap;gap:8px}
+    button{background:rgba(122,162,255,.14);border:1px solid rgba(122,162,255,.35);color:var(--text);padding:8px 10px;border-radius:999px;cursor:pointer;font-size:12.5px}
+    button:hover{background:rgba(122,162,255,.22)}
+    button.primary{background:rgba(52,211,153,.16);border-color:rgba(52,211,153,.34)}
+    button.primary:hover{background:rgba(52,211,153,.22)}
+    button.ghost{background:transparent;border-color:rgba(255,255,255,.16)}
+
+    /* Plots */
+    .plots{display:grid;gap:14px;grid-template-rows:auto auto}
+    .plotWrap{padding:10px}
+    canvas{width:100%;height:380px;border-radius:14px;background:rgba(7,10,20,.52);border:1px solid rgba(255,255,255,.12)}
+    .plotHdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+    .plotTitle{color:var(--muted);font-size:12.5px}
+
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(10,14,28,.55);font-size:12px;color:var(--muted)}
+    .dot{width:9px;height:9px;border-radius:50%;background:var(--accent)}
+    .dot.warn{background:var(--warn)}
+    .dot.danger{background:var(--danger)}
+
+    /* Right panel */
+    .tabs{display:flex;gap:8px;align-items:center}
+    .tab{padding:7px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(10,14,28,.35);color:var(--muted);cursor:pointer;font-size:12.5px}
+    .tab.active{background:rgba(122,162,255,.18);border-color:rgba(122,162,255,.35);color:var(--text)}
+
+    .sectionLabel{margin:14px 0 6px;color:var(--muted);font-size:12px}
+    .controlRow{display:grid;grid-template-columns: 1fr auto;align-items:center;gap:10px;margin:10px 0}
+    .controlRow label{font-size:13px;color:var(--text);display:flex;align-items:center;gap:10px}
+    .val{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:76px;text-align:right}
+    input[type="range"]{width:100%}
+
+    /* More obvious info icon */
+    .info{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;
+          border:1px solid rgba(255,255,255,.18);background:rgba(251,191,36,.18);color:rgba(255,255,255,.90);
+          font-weight:700;font-size:12px;cursor:help}
+
+    /* KPI */
+    .kpi{display:grid;gap:10px}
+    .kpi .item{padding:10px;border:1px solid rgba(255,255,255,.12);border-radius:14px;background:rgba(10,14,28,.45)}
+    .kpi .item .k{font-size:12px;color:var(--muted)}
+    .kpi .item .v{font-family:var(--mono);font-size:13px;margin-top:4px}
+
+    /* Tooltip */
+    .tooltip{position:fixed;z-index:99;pointer-events:none;max-width:380px;padding:10px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.14);background:rgba(18,26,51,.96);box-shadow:0 18px 46px rgba(0,0,0,.52);color:var(--text);font-size:12.8px;line-height:1.35;display:none}
+    .tooltip .t{color:var(--muted);font-size:11px;margin-bottom:6px;letter-spacing:.02em}
+
+    .foot{grid-column:1 / -1;color:var(--muted);font-size:12px;padding:0 2px 8px}
+    .mono{font-family:var(--mono)}
+
+    @media (max-width: 1080px){
+      .app{grid-template-columns:1fr;}
+      canvas{height:320px}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+
+    <div class="card title">
+      <div>
+        <h1>Predator–Prey Delay Explorer</h1>
+        <p>
+          Explore how a processing delay (time between prey capture and predator reproduction) changes predator–prey dynamics.
+          Hover any parameter or equation term for ecological explanations.
+        </p>
+      </div>
+      <div class="pill" id="regimeBadge" title="A simple label computed from the last part of the simulation.">
+        <span class="dot" id="regimeDot"></span>
+        <span id="regimeText">Ready</span>
+      </div>
+    </div>
+
+    <!-- Main: equations + plots -->
+    <div class="card">
+      <div class="hd">
+        <div class="tabs">
+          <div class="pill" style="border-color:rgba(52,211,153,.25)"><span class="dot" style="background:var(--accent2)"></span>prey</div>
+          <div class="pill" style="border-color:rgba(251,113,133,.25)"><span class="dot" style="background:var(--accent3)"></span>predator</div>
+        </div>
+        <div class="btns">
+          <button class="preset ghost" data-preset="noDelay" title="Stable equilibrium (τ = 0).">No delay</button>
+          <button class="preset ghost" data-preset="smallDelay" title="Small delay: often produces cycles depending on other parameters.">Small delay</button>
+          <button class="preset ghost" data-preset="cycles" title="Moderate delay: sustained oscillations.">Cycles</button>
+          <button class="preset" data-preset="irregular" title="Intermediate delay: irregular dynamics.">Irregular</button>
+          <button class="preset" data-preset="extinction" title="Large delay: predator extinction.">Predator extinction</button>
+          <button class="preset primary" data-preset="paperValidation" title="Parameters from the paper's main example (m=1,r=1,K=1,Y=0.6,s=0.02).">Paper validation</button>
+        </div>
+      </div>
+      <div class="bd">
+
+        <div class="eqWrap">
+          <div class="eqCard">
+            <div class="eqTitle">Model (unscaled)</div>
+            <div class="eqn" aria-label="Predator-prey delay equations">
+              <div class="row">
+                <span class="frac"><span>d<span class="term x" data-tip-title="x(t)" data-tip="Prey density at time t.">x</span></span><span class="bar"></span><span>dt</span></span>
+                =
+                <span class="term" data-tip-title="r x (1 - x/K)" data-tip="Logistic prey growth: increases when prey are rare; slows near carrying capacity K.">
+                  r<span class="term x" data-tip-title="x(t)" data-tip="Prey density.">x</span>(1 − <span class="term x" data-tip-title="x/K" data-tip="Density relative to carrying capacity.">x/K</span>)
+                </span>
+                −
+                <span class="term" data-tip-title="m x y" data-tip="Mass-action predation (Holling type I). Encounters scale with prey × predator; m is attack/capture efficiency.">
+                  m<span class="term x" data-tip-title="x(t)" data-tip="Prey density.">x</span><span class="term y" data-tip-title="y(t)" data-tip="Predator density.">y</span>
+                </span>
+              </div>
+              <div class="row" style="margin-top:8px">
+                <span class="frac"><span>d<span class="term y" data-tip-title="y(t)" data-tip="Predator density at time t.">y</span></span><span class="bar"></span><span>dt</span></span>
+                =
+                <span class="term" data-tip-title="- s y" data-tip="Predator mortality: per-capita death rate s.">− s<span class="term y" data-tip-title="y(t)" data-tip="Predator density.">y</span></span>
+                +
+                <span class="term" data-tip-title="Y m e^{-sτ} x(t−τ) y(t−τ)" data-tip="Delayed predator reproduction: proportional to predation τ time units ago, times conversion efficiency Y, and survival during the delay e^{-sτ}.">
+                  Y m e<sup class="term" data-tip-title="e^{-sτ}" data-tip="Fraction of predators that survive the processing time τ when death rate is s.">−sτ</sup>
+                  <span class="term x" data-tip-title="x(t−τ)" data-tip="Prey density τ time units ago.">x(t−τ)</span>
+                  <span class="term y" data-tip-title="y(t−τ)" data-tip="Predator density τ time units ago.">y(t−τ)</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="plots">
+          <div class="plotWrap">
+            <div class="plotHdr">
+              <div class="plotTitle term" data-tip-title="Time series" data-tip="Shows prey x(t) and predator y(t) through time. Look for convergence to steady state, sustained cycles, or irregular fluctuations.">Time series: x(t) and y(t)</div>
+              <div class="plotTitle" id="simNote"></div>
+            </div>
+            <canvas id="tsCanvas" width="1100" height="380"></canvas>
+          </div>
+          <div class="plotWrap">
+            <div class="plotHdr">
+              <div class="plotTitle term" data-tip-title="Phase plane" data-tip="Plots predator y vs prey x. Convergence to a point indicates stable equilibrium. Closed loops indicate cycles.">Phase plane: y vs x</div>
+            </div>
+            <canvas id="phaseCanvas" width="1100" height="380"></canvas>
+          </div>
+
+          <!-- Orbit diagram / bifurcation scan -->
+          <div class="plotWrap">
+            <div class="plotHdr">
+              <div class="plotTitle term" data-tip-title="Orbit (bifurcation) diagram" data-tip="For each τ, we integrate long enough to approach the attractor, then plot the local maxima and minima of predator y(t) near the end. One point ≈ stable equilibrium; 2 points ≈ simple cycle; 4, 8, ... points can indicate period-doubling; a dense band suggests chaotic dynamics. The paper does exactly this for y(t) (their Figure 2), but also discusses removing some extrema caused by 'kinks' rather than true bifurcations.">Orbit diagram: local maxima/minima of y(t) vs τ</div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button id="scanBtn" class="ghost" title="Scan across τ and plot local maxima/minima of y(t) near the end.">Scan τ</button>
+                <button id="scanStopBtn" class="ghost" style="display:none" title="Stop the scan">Stop</button>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;margin:0 4px 10px;flex-wrap:wrap;color:var(--muted);font-size:12.5px">
+              <span class="term" data-tip-title="Scan range" data-tip="Default matches the paper's Figure 2: τ from 0 to 120.">τ range</span>
+              <span class="mono">[</span>
+              <input id="scanMin" type="number" value="0" min="0" max="300" step="1" style="width:72px;background:rgba(10,14,28,.35);border:1px solid rgba(255,255,255,.14);color:var(--text);border-radius:10px;padding:6px 8px" />
+              <span class="mono">,</span>
+              <input id="scanMax" type="number" value="120" min="0" max="300" step="1" style="width:84px;background:rgba(10,14,28,.35);border:1px solid rgba(255,255,255,.14);color:var(--text);border-radius:10px;padding:6px 8px" />
+              <span class="mono">]</span>
+              <span style="opacity:.7">•</span>
+              <span class="term" data-tip-title="Resolution" data-tip="Number of τ values evaluated. More steps = smoother diagram but slower.">steps</span>
+              <input id="scanSteps" type="number" value="240" min="20" max="1200" step="10" style="width:84px;background:rgba(10,14,28,.35);border:1px solid rgba(255,255,255,.14);color:var(--text);border-radius:10px;padding:6px 8px" />
+              <span style="opacity:.7">•</span>
+              <label class="term" style="display:flex;gap:8px;align-items:center" data-tip-title="Continuation" data-tip="In bistable regions, outcomes can depend on where you start. When continuation is ON, we seed each τ run using the final state from the previous τ (a simple way to expose hysteresis). The paper used forward/backward continuation to reveal bistability.">
+                <input id="scanCont" type="checkbox" checked /> continuation
+              </label>
+              <span style="opacity:.7">•</span>
+              <label class="term" style="display:flex;gap:8px;align-items:center" data-tip-title="What gets plotted" data-tip="The paper plots both local maxima and minima of predator y(t) on the attractor. You can choose maxima only if you want a cleaner, classic-looking bifurcation diagram.">
+                <select id="scanWhich" style="background:rgba(10,14,28,.35);border:1px solid rgba(255,255,255,.14);color:var(--text);border-radius:10px;padding:6px 8px">
+                  <option value="both" selected>max & min</option>
+                  <option value="max">max only</option>
+                  <option value="min">min only</option>
+                </select>
+              </label>
+              <span id="scanStatus" class="mono" style="margin-left:auto;opacity:.85"></span>
+            </div>
+            <div style="height:10px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.10);overflow:hidden;margin:0 4px 10px">
+              <div id="scanBar" style="height:100%;width:0%;background:linear-gradient(90deg, rgba(52,211,153,.85), rgba(122,162,255,.85), rgba(251,113,133,.85));"></div>
+            </div>
+            <canvas id="bifCanvas" width="1100" height="360"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: parameters + indicators (tabs) -->
+    <div class="card" id="sideCard">
+      <div class="hd">
+        <div class="tabs">
+          <div class="tab active" id="tabParams">Parameters</div>
+          <div class="tab" id="tabStats">Stats</div>
+        </div>
+        <button class="ghost" id="collapseBtn" title="Collapse/expand the sidebar" style="padding:7px 10px">⟷</button>
+      </div>
+      <div class="bd" id="sideBody">
+
+        <div id="panelParams">
+          <div class="sectionLabel">Prey</div>
+          <div class="controlRow">
+            <label>r <span class="info" data-tip-title="r — prey intrinsic growth rate" data-tip="Per-capita prey growth when prey are rare. Higher r makes prey rebound faster and can increase oscillation amplitude.">i</span></label>
+            <div class="val" id="rVal"></div>
+            <input id="r" type="range" min="0.05" max="2.5" step="0.01" />
+          </div>
+          <div class="controlRow">
+            <label>K <span class="info" data-tip-title="K — prey carrying capacity" data-tip="Environmental limit for prey density. Higher K allows higher prey peaks and can support larger predator peaks.">i</span></label>
+            <div class="val" id="KVal"></div>
+            <input id="K" type="range" min="0.2" max="5.0" step="0.01" />
+          </div>
+
+          <div class="sectionLabel">Predation</div>
+          <div class="controlRow">
+            <label>m <span class="info" data-tip-title="m — attack / capture rate" data-tip="Mass-action predation coefficient (encounter × capture efficiency). Predation rate scales with prey × predator.">i</span></label>
+            <div class="val" id="mVal"></div>
+            <input id="m" type="range" min="0.0" max="3.0" step="0.01" />
+          </div>
+
+          <div class="sectionLabel">Predator</div>
+          <div class="controlRow">
+            <label>s <span class="info" data-tip-title="s — predator mortality rate" data-tip="Per-capita predator death rate. Larger s makes predators harder to sustain and reduces the survival factor e^{-sτ}.">i</span></label>
+            <div class="val" id="sVal"></div>
+            <input id="s" type="range" min="0.001" max="1.2" step="0.001" />
+          </div>
+          <div class="controlRow">
+            <label>Y <span class="info" data-tip-title="Y — conversion efficiency" data-tip="How efficiently consumed prey become predator biomass / offspring. Larger Y strengthens predator growth.">i</span></label>
+            <div class="val" id="YVal"></div>
+            <input id="Y" type="range" min="0.0" max="2.0" step="0.01" />
+          </div>
+
+          <div class="sectionLabel">Delay</div>
+          <div class="controlRow">
+            <label>τ <span class="info" data-tip-title="τ — processing delay" data-tip="Time between prey capture and predator reproduction. Larger τ creates feedback mismatch, which can cause cycles or irregular dynamics.">i</span></label>
+            <div class="val" id="tauVal"></div>
+            <input id="tau" type="range" min="0" max="200" step="0.05" />
+          </div>
+
+          <div class="sectionLabel">Initial conditions</div>
+          <div class="controlRow">
+            <label>x(0) <span class="info" data-tip-title="Initial prey" data-tip="Starting prey density at t = 0 (also used for history over [-τ,0] in this app).">i</span></label>
+            <div class="val" id="x0Val"></div>
+            <input id="x0" type="range" min="0.0" max="5.0" step="0.01" />
+          </div>
+          <div class="controlRow">
+            <label>y(0) <span class="info" data-tip-title="Initial predator" data-tip="Starting predator density at t = 0 (also used for history over [-τ,0] in this app).">i</span></label>
+            <div class="val" id="y0Val"></div>
+            <input id="y0" type="range" min="0.0" max="5.0" step="0.01" />
+          </div>
+
+          <div class="sectionLabel">Simulation</div>
+          <div class="controlRow">
+            <label>T <span class="info" data-tip-title="Simulation length" data-tip="Total simulated time. Increase to see long-term behavior (especially near irregular dynamics).">i</span></label>
+            <div class="val" id="TVal"></div>
+            <input id="T" type="range" min="50" max="2500" step="1" />
+          </div>
+          <div class="controlRow">
+            <label>Δt <span class="info" data-tip-title="Time step" data-tip="Numerical step size. Smaller Δt is slower but more accurate. For delay systems, using Δt small relative to τ helps avoid artifacts.">i</span></label>
+            <div class="val" id="dtVal"></div>
+            <input id="dt" type="range" min="0.001" max="0.2" step="0.001" />
+          </div>
+        </div>
+
+        <div id="panelStats" style="display:none">
+          <div class="kpi">
+            <div class="item" title="Average prey density over the final part of the run.">
+              <div class="k">Mean prey</div>
+              <div class="v" id="meanX">—</div>
+            </div>
+            <div class="item" title="Average predator density over the final part of the run.">
+              <div class="k">Mean predator</div>
+              <div class="v" id="meanY">—</div>
+            </div>
+            <div class="item" title="Min/max predator density over the final part of the run.">
+              <div class="k">Predator range</div>
+              <div class="v" id="rangeY">—</div>
+            </div>
+            <div class="item" title="Whether predators drop near zero (extinction threshold).">
+              <div class="k">Extinction check</div>
+              <div class="v" id="extinct">—</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="foot">
+      <div class="mono">Notes:</div>
+      <ul style="margin:8px 0 0 18px; padding:0; line-height:1.35">
+        <li>Solver: explicit method for delay differential equations with linear interpolation of past values (fast and simple for exploration).</li>
+        <li>Delay range: the paper’s main example varies τ up to ~120 and the extinction threshold is around τ≈170 for their parameters; the slider goes to 200 for comparison.</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <div class="tooltip" id="tooltip"><div class="t" id="ttTitle"></div><div id="ttBody"></div></div>
+
+  <script>
+    // ----------------------------
+    // Utilities
+    // ----------------------------
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const fmt = (v, d=3) => {
+      if (!isFinite(v)) return '—';
+      const abs = Math.abs(v);
+      if (abs !== 0 && (abs < 0.001 || abs > 10000)) return v.toExponential(3);
+      return Number(v).toFixed(d);
+    };
+
+    // Tooltip
+    const tooltip = document.getElementById('tooltip');
+    const ttTitle = document.getElementById('ttTitle');
+    const ttBody  = document.getElementById('ttBody');
+    function showTip(e, title, body){
+      ttTitle.textContent = title || '';
+      ttBody.textContent = body || '';
+      tooltip.style.display = 'block';
+      moveTip(e);
+    }
+    function moveTip(e){
+      const pad = 14;
+      tooltip.style.left = (e.clientX + pad) + 'px';
+      tooltip.style.top  = (e.clientY + pad) + 'px';
+      const r = tooltip.getBoundingClientRect();
+      if (r.right > window.innerWidth - 8) tooltip.style.left = (window.innerWidth - r.width - 10) + 'px';
+      if (r.bottom > window.innerHeight - 8) tooltip.style.top = (window.innerHeight - r.height - 10) + 'px';
+    }
+    function hideTip(){ tooltip.style.display = 'none'; }
+    document.addEventListener('mousemove', (e)=>{ if (tooltip.style.display==='block') moveTip(e); });
+
+    function bindTips(){
+      document.querySelectorAll('[data-tip]').forEach(el=>{
+        el.addEventListener('mouseenter', (e)=>showTip(e, el.dataset.tipTitle || '', el.dataset.tip || ''));
+        el.addEventListener('mouseleave', hideTip);
+      });
+    }
+
+    // ----------------------------
+    // Model simulation (unscaled)
+    // dx/dt = r x (1 - x/K) - m x y
+    // dy/dt = -s y + Y m e^{-s tau} x(t-tau) y(t-tau)
+    // ----------------------------
+    function simulate(params){
+      const { r, K, m, s, Y, tau, x0, y0, T, dt: dtIn } = params;
+
+      let dt = dtIn;
+      if (tau > 0 && dt > tau/5) dt = Math.max(0.001, tau/5);
+
+      const steps = Math.floor(T / dt);
+      const nHist = tau === 0 ? 1 : Math.max(2, Math.floor(tau / dt) + 2);
+
+      const tArr = new Float64Array(steps + nHist);
+      const xArr = new Float64Array(steps + nHist);
+      const yArr = new Float64Array(steps + nHist);
+
+      const tStart = -tau;
+      for (let i=0;i<nHist;i++){
+        tArr[i] = tStart + i * dt;
+        xArr[i] = Math.max(0, x0);
+        yArr[i] = Math.max(0, y0);
+      }
+
+      let currentIndex = nHist - 1;
+
+      function pastValue(time){
+        const u = (time - tStart) / dt;
+        let i = Math.floor(u);
+        i = clamp(i, 0, currentIndex-1);
+        const t0 = tArr[i];
+        const t1 = tArr[i+1];
+        const w = (t1 === t0) ? 0 : (time - t0) / (t1 - t0);
+        const x = xArr[i] + w * (xArr[i+1] - xArr[i]);
+        const y = yArr[i] + w * (yArr[i+1] - yArr[i]);
+        return [x, y];
+      }
+
+      const surv = (tau === 0) ? 1 : Math.exp(-s * tau);
+
+      for (let k=0;k<steps;k++){
+        const i = nHist + k;
+        const t = k * dt;
+
+        const x = xArr[currentIndex];
+        const y = yArr[currentIndex];
+
+        let xLag = x, yLag = y;
+        if (tau > 0) [xLag, yLag] = pastValue(t - tau);
+
+        const dx = r * x * (1 - x / K) - m * x * y;
+        const dy = -s * y + (Y * m * surv) * xLag * yLag;
+
+        let xNext = x + dt * dx;
+        let yNext = y + dt * dy;
+
+        xNext = Math.max(0, xNext);
+        yNext = Math.max(0, yNext);
+
+        tArr[i] = t + dt;
+        xArr[i] = xNext;
+        yArr[i] = yNext;
+        currentIndex = i;
+      }
+
+      const offset = nHist - 1;
+      const N = steps + 1;
+      const tOut = new Float64Array(N);
+      const xOut = new Float64Array(N);
+      const yOut = new Float64Array(N);
+      for (let i=0;i<N;i++){
+        tOut[i] = tArr[offset + i];
+        xOut[i] = xArr[offset + i];
+        yOut[i] = yArr[offset + i];
+      }
+
+      return { t: tOut, x: xOut, y: yOut, dtUsed: dt };
+    }
+
+    // ----------------------------
+    // Diagnostics (simple)
+    // ----------------------------
+    function diagnostics(sim){
+      const {t,x,y} = sim;
+      const N = t.length;
+      const start = Math.floor(N * 0.8);
+
+      let sumX=0,sumY=0,minY=Infinity,maxY=-Infinity;
+      for (let i=start;i<N;i++){
+        sumX += x[i];
+        sumY += y[i];
+        if (y[i] < minY) minY = y[i];
+        if (y[i] > maxY) maxY = y[i];
+      }
+      const nSeg = (N - start);
+      const meanX = sumX / nSeg;
+      const meanY = sumY / nSeg;
+
+      // Variability
+      let varY=0;
+      for (let i=start;i<N;i++){
+        const d = y[i] - meanY;
+        varY += d*d;
+      }
+      const sdY = Math.sqrt(varY / Math.max(1,nSeg-1));
+
+      // Peak timing variability (rough)
+      const peaks = [];
+      for (let i=start+1;i<N-1;i++) if (y[i] > y[i-1] && y[i] > y[i+1]) peaks.push(t[i]);
+      const intervals = [];
+      for (let i=1;i<peaks.length;i++) intervals.push(peaks[i]-peaks[i-1]);
+      let cvInt = NaN;
+      if (intervals.length >= 3){
+        const mu = intervals.reduce((a,b)=>a+b,0)/intervals.length;
+        const v = intervals.reduce((a,b)=>a+(b-mu)*(b-mu),0)/(intervals.length-1);
+        cvInt = Math.sqrt(v)/mu;
+      }
+
+      const extinct = meanY < 1e-4 || maxY < 1e-4;
+
+      let regime = 'Ready';
+      if (extinct) regime = 'Predator extinction';
+      else if (sdY < 1e-3 && (maxY-minY) < 1e-3) regime = 'Stable equilibrium';
+      else if (isFinite(cvInt) && cvInt < 0.06) regime = 'Sustained oscillations';
+      else regime = 'Irregular dynamics';
+
+      return { meanX, meanY, minY, maxY, extinct, regime, sdY, cvInt };
+    }
+
+    // ----------------------------
+    // Plotting (Canvas)
+    // ----------------------------
+    function clearCanvas(ctx){ ctx.clearRect(0,0,ctx.canvas.width, ctx.canvas.height); }
+
+    function drawAxes(ctx, pad, xLabel, yLabel){
+      const w = ctx.canvas.width, h = ctx.canvas.height;
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.moveTo(pad, pad);
+      ctx.lineTo(pad, h-pad);
+      ctx.lineTo(w-pad, h-pad);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.70)';
+      ctx.font = '14px ' + getComputedStyle(document.documentElement).getPropertyValue('--sans');
+      ctx.fillText(yLabel, 12, 22);
+      ctx.fillText(xLabel, w - pad - 64, h - 12);
+    }
+
+    function plotTimeSeries(canvas, t, x, y){
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+      clearCanvas(ctx);
+      const pad = 44;
+
+      const xMin = t[0], xMax = t[t.length-1];
+      let yMax = 0;
+      for (let i=0;i<t.length;i++) yMax = Math.max(yMax, x[i], y[i]);
+      yMax = yMax === 0 ? 1 : yMax * 1.08;
+
+      drawAxes(ctx, pad, 'time', 'density');
+
+      // subtle grid
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = 1;
+      for (let k=1;k<=4;k++){
+        const yy = pad + (h-2*pad)*k/5;
+        ctx.beginPath();
+        ctx.moveTo(pad, yy);
+        ctx.lineTo(w-pad, yy);
+        ctx.stroke();
+      }
+
+      const tx = (u)=> pad + (u - xMin) / (xMax - xMin) * (w - 2*pad);
+      const ty = (v)=> (h - pad) - (v) / (yMax) * (h - 2*pad);
+
+      // prey line
+      ctx.strokeStyle = 'rgba(52,211,153,0.95)';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      for (let i=0;i<t.length;i++){
+        const px = tx(t[i]);
+        const py = ty(x[i]);
+        if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+      }
+      ctx.stroke();
+
+      // predator line
+      ctx.strokeStyle = 'rgba(251,113,133,0.95)';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      for (let i=0;i<t.length;i++){
+        const px = tx(t[i]);
+        const py = ty(y[i]);
+        if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+      }
+      ctx.stroke();
+
+      // legend
+      ctx.font = '13px ' + getComputedStyle(document.documentElement).getPropertyValue('--mono');
+      ctx.fillStyle = 'rgba(52,211,153,0.98)';
+      ctx.fillText('prey x(t)', pad, pad-14);
+      ctx.fillStyle = 'rgba(251,113,133,0.98)';
+      ctx.fillText('predator y(t)', pad+120, pad-14);
+
+      // labels
+      ctx.fillStyle = 'rgba(255,255,255,0.70)';
+      ctx.fillText(fmt(yMax,2), 10, pad+3);
+      ctx.fillText('0', 20, h-pad+6);
+    }
+
+    function plotPhase(canvas, x, y){
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+      clearCanvas(ctx);
+      const pad = 44;
+
+      let xMax = 0, yMax = 0;
+      for (let i=0;i<x.length;i++){
+        xMax = Math.max(xMax, x[i]);
+        yMax = Math.max(yMax, y[i]);
+      }
+      xMax = xMax === 0 ? 1 : xMax * 1.08;
+      yMax = yMax === 0 ? 1 : yMax * 1.08;
+
+      drawAxes(ctx, pad, 'prey x', 'predator y');
+
+      const tx = (u)=> pad + (u) / (xMax) * (w - 2*pad);
+      const ty = (v)=> (h - pad) - (v) / (yMax) * (h - 2*pad);
+
+      // trajectory
+      ctx.strokeStyle = 'rgba(122,162,255,0.96)';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      for (let i=0;i<x.length;i++){
+        const px = tx(x[i]);
+        const py = ty(y[i]);
+        if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+      }
+      ctx.stroke();
+
+      // start/end markers
+      const sx = tx(x[0]), sy = ty(y[0]);
+      const ex = tx(x[x.length-1]), ey = ty(y[y.length-1]);
+      ctx.fillStyle = 'rgba(251,191,36,0.95)';
+      ctx.beginPath(); ctx.arc(sx, sy, 4.5, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.40)';
+      ctx.beginPath(); ctx.arc(ex, ey, 4.5, 0, Math.PI*2); ctx.fill();
+
+      ctx.font = '12.5px ' + getComputedStyle(document.documentElement).getPropertyValue('--mono');
+      ctx.fillStyle = 'rgba(255,255,255,0.70)';
+      ctx.fillText('start', sx+7, sy-7);
+      ctx.fillText('end', ex+7, ey-7);
+    }
+
+    // Orbit diagram plotting
+    function plotOrbitDiagram(canvas, points, tauMin, tauMax){
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+      clearCanvas(ctx);
+      const pad = 44;
+
+      // y-range from points
+      let yMax = 0;
+      for (const p of points) yMax = Math.max(yMax, p.y);
+      yMax = yMax === 0 ? 1 : yMax * 1.08;
+
+      // axes
+      drawAxes(ctx, pad, 'delay τ', 'predator y extrema');
+
+      // grid
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = 1;
+      for (let k=1;k<=4;k++){
+        const yy = pad + (h-2*pad)*k/5;
+        ctx.beginPath();
+        ctx.moveTo(pad, yy);
+        ctx.lineTo(w-pad, yy);
+        ctx.stroke();
+      }
+
+      const tx = (tau)=> pad + (tau - tauMin) / (tauMax - tauMin) * (w - 2*pad);
+      const ty = (v)=> (h - pad) - (v) / (yMax) * (h - 2*pad);
+
+      // points
+      ctx.fillStyle = 'rgba(251,113,133,0.75)';
+      for (const p of points){
+        const px = tx(p.tau);
+        const py = ty(p.y);
+        ctx.fillRect(px, py, 1.5, 1.5);
+      }
+
+      // axis tick labels for τ (requested)
+      ctx.font = '13px ' + getComputedStyle(document.documentElement).getPropertyValue('--mono');
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      const yTick = h - pad + 18;
+      ctx.fillText(fmt(tauMin,0), pad-2, yTick);
+      const mid = (tauMin + tauMax)/2;
+      const midX = tx(mid);
+      ctx.fillText(fmt(mid,0), midX-12, yTick);
+      ctx.fillText(fmt(tauMax,0), w-pad-18, yTick);
+
+      // y max label
+      ctx.fillText(fmt(yMax,2), 10, pad+3);
+      ctx.fillText('0', 20, h-pad+6);
+    }
+
+    function localExtrema(arr, startIdx){
+      const maxes = [];
+      const mins  = [];
+      for (let i=Math.max(1,startIdx); i<arr.length-1; i++){
+        const a = arr[i-1], b = arr[i], c = arr[i+1];
+        if (b > a && b > c) maxes.push(b);
+        if (b < a && b < c) mins.push(b);
+      }
+      return { maxes, mins };
+    }
+
+    
+    // ----------------------------
+    // UI
+    // ----------------------------
+    const els = {
+      r: document.getElementById('r'), K: document.getElementById('K'), m: document.getElementById('m'),
+      s: document.getElementById('s'), Y: document.getElementById('Y'), tau: document.getElementById('tau'),
+      x0: document.getElementById('x0'), y0: document.getElementById('y0'),
+      T: document.getElementById('T'), dt: document.getElementById('dt'),
+      rVal: document.getElementById('rVal'), KVal: document.getElementById('KVal'), mVal: document.getElementById('mVal'),
+      sVal: document.getElementById('sVal'), YVal: document.getElementById('YVal'), tauVal: document.getElementById('tauVal'),
+      x0Val: document.getElementById('x0Val'), y0Val: document.getElementById('y0Val'),
+      TVal: document.getElementById('TVal'), dtVal: document.getElementById('dtVal'),
+      meanX: document.getElementById('meanX'), meanY: document.getElementById('meanY'), rangeY: document.getElementById('rangeY'),
+      extinct: document.getElementById('extinct'),
+      tsCanvas: document.getElementById('tsCanvas'), phaseCanvas: document.getElementById('phaseCanvas'),
+      bifCanvas: document.getElementById('bifCanvas'),
+      regimeText: document.getElementById('regimeText'), regimeDot: document.getElementById('regimeDot'),
+      simNote: document.getElementById('simNote'),
+      tabParams: document.getElementById('tabParams'), tabStats: document.getElementById('tabStats'),
+      panelParams: document.getElementById('panelParams'), panelStats: document.getElementById('panelStats'),
+      collapseBtn: document.getElementById('collapseBtn'), sideCard: document.getElementById('sideCard'), sideBody: document.getElementById('sideBody'),
+
+      // scan UI
+      scanBtn: document.getElementById('scanBtn'),
+      scanStopBtn: document.getElementById('scanStopBtn'),
+      scanMin: document.getElementById('scanMin'),
+      scanMax: document.getElementById('scanMax'),
+      scanSteps: document.getElementById('scanSteps'),
+      scanCont: document.getElementById('scanCont'),
+      scanWhich: document.getElementById('scanWhich'),
+      scanStatus: document.getElementById('scanStatus'),
+      scanBar: document.getElementById('scanBar')
+    };
+
+    const defaults = {
+      r: 1.0, K: 1.0, m: 1.0, s: 0.05, Y: 0.6, tau: 0.0,
+      x0: 0.6, y0: 0.2,
+      T: 500, dt: 0.02
+    };
+
+    // Presets (including the paper example parameters)
+    const presets = {
+      noDelay:        { ...defaults, tau: 0.0, T: 300, dt: 0.02 },
+      smallDelay:     { ...defaults, tau: 1.2, T: 600, dt: 0.02 },
+      cycles:         { ...defaults, s: 0.03, Y: 0.7, tau: 6.0, T: 900, dt: 0.02 },
+      irregular:      { ...defaults, r: 1.0, K: 1.0, m: 1.0, s: 0.02, Y: 0.6, tau: 90.0, x0: 0.1, y0: 0.1, T: 1800, dt: 0.02 },
+      extinction:     { ...defaults, tau: 180.0, s: 0.12, Y: 0.5, T: 800, dt: 0.02 },
+      // Paper main example: m=1, r=1, K=1, Y=0.6, s=0.02, vary tau (paper shows Hopf near ~1.917 and ~108.365, chaos near tau~90)
+      paperValidation:{ r: 1.0, K: 1.0, m: 1.0, s: 0.02, Y: 0.6, tau: 10.0, x0: 0.1, y0: 0.1, T: 1200, dt: 0.02, scan:{min:0,max:120,steps:240,which:'both',cont:true} }
+      // Fig 2 in the paper: same parameters; orbit diagram is produced by scanning τ in [0,120] with history x(t)=y(t)=0.1 on [-τ,0].
+    };
+
+    function setControls(p){
+      for (const k of ['r','K','m','s','Y','tau','x0','y0','T','dt']) els[k].value = p[k];
+      // Optional: set scan defaults when a preset includes them (useful for paper Fig 2 replication)
+      if (p.scan){
+        if (typeof p.scan.min === 'number') els.scanMin.value = p.scan.min;
+        if (typeof p.scan.max === 'number') els.scanMax.value = p.scan.max;
+        if (typeof p.scan.steps === 'number') els.scanSteps.value = p.scan.steps;
+        if (typeof p.scan.which === 'string') els.scanWhich.value = p.scan.which;
+        if (typeof p.scan.cont === 'boolean') els.scanCont.checked = p.scan.cont;
+      }
+      updateLabels();
+    }
+
+    function readControls(){
+      return {
+        r: +els.r.value, K: +els.K.value, m: +els.m.value,
+        s: +els.s.value, Y: +els.Y.value, tau: +els.tau.value,
+        x0: +els.x0.value, y0: +els.y0.value,
+        T: +els.T.value, dt: +els.dt.value
+      };
+    }
+
+    function updateLabels(){
+      els.rVal.textContent = fmt(+els.r.value, 3);
+      els.KVal.textContent = fmt(+els.K.value, 3);
+      els.mVal.textContent = fmt(+els.m.value, 3);
+      els.sVal.textContent = fmt(+els.s.value, 3);
+      els.YVal.textContent = fmt(+els.Y.value, 3);
+      els.tauVal.textContent = fmt(+els.tau.value, 2);
+      els.x0Val.textContent = fmt(+els.x0.value, 3);
+      els.y0Val.textContent = fmt(+els.y0.value, 3);
+      els.TVal.textContent = fmt(+els.T.value, 0);
+      els.dtVal.textContent = fmt(+els.dt.value, 3);
+    }
+
+    function setRegimeBadge(diag){
+      els.regimeText.textContent = diag.regime;
+      els.regimeDot.classList.remove('warn','danger');
+      if (diag.regime === 'Predator extinction') els.regimeDot.classList.add('danger');
+      else if (diag.regime === 'Irregular dynamics') els.regimeDot.classList.add('warn');
+    }
+
+    function render(){
+      updateLabels();
+      const p = readControls();
+      const sim = simulate(p);
+      const diag = diagnostics(sim);
+
+      plotTimeSeries(els.tsCanvas, sim.t, sim.x, sim.y);
+      plotPhase(els.phaseCanvas, sim.x, sim.y);
+
+      els.meanX.textContent = fmt(diag.meanX, 4);
+      els.meanY.textContent = fmt(diag.meanY, 4);
+      els.rangeY.textContent = `${fmt(diag.minY, 4)}  →  ${fmt(diag.maxY, 4)}`;
+      els.extinct.textContent = diag.extinct ? 'Yes (predators ~ 0)' : 'No';
+      setRegimeBadge(diag);
+
+      const noteBits = [];
+      if (p.tau > 0 && sim.dtUsed !== p.dt) noteBits.push(`Δt → ${fmt(sim.dtUsed,3)}`);
+      noteBits.push(`N=${sim.t.length}`);
+      els.simNote.textContent = noteBits.join(' • ');
+    }
+
+    // Debounced auto-run
+    let timer = null;
+    function scheduleRender(){
+      updateLabels();
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(render, 120);
+    }
+
+    ['r','K','m','s','Y','tau','x0','y0','T','dt'].forEach(id=>{
+      els[id].addEventListener('input', scheduleRender);
+    });
+
+    document.querySelectorAll('.preset').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const key = b.dataset.preset;
+        setControls(presets[key] || defaults);
+        render();
+      });
+    });
+
+    // Tabs
+    function showPanel(which){
+      const isParams = which === 'params';
+      els.panelParams.style.display = isParams ? '' : 'none';
+      els.panelStats.style.display  = isParams ? 'none' : '';
+      els.tabParams.classList.toggle('active', isParams);
+      els.tabStats.classList.toggle('active', !isParams);
+    }
+    els.tabParams.addEventListener('click', ()=>showPanel('params'));
+    els.tabStats.addEventListener('click', ()=>showPanel('stats'));
+
+    // Collapse sidebar
+    let collapsed = false;
+    els.collapseBtn.addEventListener('click', ()=>{
+      collapsed = !collapsed;
+      if (collapsed){
+        els.sideCard.style.display = 'none';
+        // expand main column
+        document.querySelector('.app').style.gridTemplateColumns = '1fr';
+      } else {
+        els.sideCard.style.display = '';
+        document.querySelector('.app').style.gridTemplateColumns = '1fr 340px';
+      }
+    });
+
+    // ----------------------------
+    // Orbit diagram / bifurcation scan
+    // ----------------------------
+    let scanRunning = false;
+    let scanAbort = false;
+
+    function setScanUI(running){
+      scanRunning = running;
+      els.scanBtn.style.display = running ? 'none' : '';
+      els.scanStopBtn.style.display = running ? '' : 'none';
+      els.scanMin.disabled = running;
+      els.scanMax.disabled = running;
+      els.scanSteps.disabled = running;
+      els.scanCont.disabled = running;
+      els.scanWhich.disabled = running;
+      if (!running){
+        els.scanStatus.textContent = '';
+        els.scanBar.style.width = '0%';
+      }
+    }
+
+    async function runScan(){
+      const base = readControls();
+      const tauMin = Math.min(+els.scanMin.value, +els.scanMax.value);
+      const tauMax = Math.max(+els.scanMin.value, +els.scanMax.value);
+      const steps = clamp(Math.floor(+els.scanSteps.value), 20, 2000);
+      const which = els.scanWhich.value;
+      const cont = !!els.scanCont.checked;
+
+      const points = [];
+      const taus = [];
+      for (let i=0;i<steps;i++) taus.push(tauMin + (tauMax - tauMin) * (i/(steps-1)));
+
+      // We mimic the paper's approach: integrate long enough to approach the attractor,
+      // then collect local maxima/minima of y(t) on the attractor. (Their Fig 2.)
+      // In practice, we use the last 20% of the run.
+
+      let seedX = base.x0;
+      let seedY = base.y0;
+
+      scanAbort = false;
+      setScanUI(true);
+
+      for (let i=0;i<taus.length;i++){
+        if (scanAbort) break;
+
+        const tau = taus[i];
+        const p = { ...base, tau };
+        if (cont && i>0){
+          // crude continuation: seed the history with last state from previous τ
+          p.x0 = seedX;
+          p.y0 = seedY;
+        }
+
+        const sim = simulate(p);
+        const start = Math.floor(sim.y.length * 0.8);
+        const ex = localExtrema(sim.y, start);
+
+        const add = (arr)=>{ for (const yy of arr) points.push({ tau, y: yy }); };
+        if (which === 'max') add(ex.maxes);
+        else if (which === 'min') add(ex.mins);
+        else { add(ex.maxes); add(ex.mins); }
+
+        // update seeds
+        seedX = sim.x[sim.x.length-1];
+        seedY = sim.y[sim.y.length-1];
+
+        // progress + incremental redraw
+        const pct = Math.round(100 * (i+1) / taus.length);
+        els.scanBar.style.width = pct + '%';
+        els.scanStatus.textContent = `scanning… ${i+1}/${taus.length}`;
+
+        if (i % 6 === 0){
+          plotOrbitDiagram(els.bifCanvas, points, tauMin, tauMax);
+          await new Promise(r=>setTimeout(r, 0));
+        }
+      }
+
+      plotOrbitDiagram(els.bifCanvas, points, tauMin, tauMax);
+      els.scanStatus.textContent = scanAbort ? 'stopped' : 'done';
+      setTimeout(()=>{ if (!scanAbort) els.scanStatus.textContent = ''; }, 1200);
+      setScanUI(false);
+      scanAbort = false;
+    }
+
+    els.scanBtn.addEventListener('click', ()=>{
+      if (scanRunning) return;
+      runScan();
+    });
+    els.scanStopBtn.addEventListener('click', ()=>{ scanAbort = true; });
+
+    // initial empty orbit diagram
+    plotOrbitDiagram(els.bifCanvas, [], 0, 120);
+
+    bindTips();
+    setControls(defaults);
+    render();
+  </script>
+</body>
+</html>
